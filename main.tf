@@ -89,94 +89,99 @@ resource "aws_wafregional_rule" "blocked_path_prefixes" {
   }
 }
 
-resource "aws_wafregional_web_acl" "wafacl" {
-  name        = var.web_acl_name
-  metric_name = var.web_acl_metric_name
+
+resource "aws_wafv2_web_acl" "example" {
+  name        = "managed-rule-example"
+  description = "Example of a managed rule."
+  scope       = "REGIONAL"
 
   default_action {
-    type = "ALLOW"
+    allow {}
   }
 
-  dynamic "rule" {
-    for_each = aws_wafregional_rule.ips.*.id
-    content {
-      type     = "REGULAR"
-      rule_id  = rule.value
-      priority = 1 + rule.key
+  rule {
+    name     = "rule-1"
+    priority = 1
 
-      action {
-        type = "BLOCK"
+    override_action {
+      count {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesCommonRuleSet"
+        vendor_name = "AWS"
+
+        rule_action_override {
+          action_to_use {
+            count {}
+          }
+
+          name = "SizeRestrictions_QUERYSTRING"
+        }
+
+        rule_action_override {
+          action_to_use {
+            count {}
+          }
+
+          name = "NoUserAgent_HEADER"
+        }
+
+        scope_down_statement {
+          geo_match_statement {
+            country_codes = ["US", "NL"]
+          }
+        }
       }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = false
+      metric_name                = "AWSManagedRulesCommonRuleSet"
+      sampled_requests_enabled   = false
     }
   }
 
   rule {
-    type     = "REGULAR"
-    rule_id  = aws_wafregional_rule.allowed_hosts.id
-    priority = 1 + length(aws_wafregional_rule.ips.*.id)
+    name     = "SQLInjectionQueryArguments"
+    priority = 2
 
     action {
-      type = "BLOCK"
+      block {}
     }
-  }
 
-  rule {
-    type     = "REGULAR"
-    rule_id  = aws_wafregional_rule.blocked_path_prefixes.id
-    priority = 1 + length(aws_wafregional_rule.ips.*.id) + 1
+    statement {
+      sqli_match_statement {
 
-    action {
-      type = "BLOCK"
-    }
-  }
+        field_to_match {
+          all_query_arguments {
+          }
+        }
 
-  dynamic "rule" {
-    for_each = var.rate_based_rules
-    content {
-      type     = "RATE_BASED"
-      rule_id  = rule.value
-      priority = 1 + length(aws_wafregional_rule.ips.*.id) + 1 + 1 + rule.key
+        text_transformation {
+          priority = 1
+          type     = "URL_DECODE"
+        }
 
-      action {
-        type = "BLOCK"
+        text_transformation {
+          priority = 2
+          type     = "HTML_ENTITY_DECODE"
+        }
       }
     }
-  }
 
-  dynamic "rule" {
-    for_each = length(var.wafregional_rule_f5_id) > 0 ? [var.wafregional_rule_f5_id] : []
-    content {
-      type     = "GROUP"
-      rule_id  = rule.value
-      priority = 1 + length(aws_wafregional_rule.ips.*.id) + 1 + 1 + length(var.rate_based_rules) + rule.key
-
-      override_action {
-        type = "NONE"
-      }
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "SQLInjectionQueryArguments"
+      sampled_requests_enabled   = true
     }
   }
 
-  dynamic "rule" {
-    for_each = var.rules
-    content {
-      type     = "REGULAR"
-      rule_id  = rule.value
-      priority = 1 + length(aws_wafregional_rule.ips.*.id) + 1 + 1 + length(var.rate_based_rules) + (length(var.wafregional_rule_f5_id) > 0 ? 1 : 0) + rule.key
-
-      action {
-        type = "BLOCK"
-      }
-    }
+  visibility_config {
+    cloudwatch_metrics_enabled = false
+    metric_name                = "WebACLMetric"
+    sampled_requests_enabled   = false
   }
 
-  lifecycle {
-    create_before_destroy = true
-  }
-
-}
-
-resource "aws_wafregional_web_acl_association" "main" {
-  count        = var.associate_alb ? 1 : 0
-  resource_arn = var.alb_arn
-  web_acl_id   = aws_wafregional_web_acl.wafacl.id
 }

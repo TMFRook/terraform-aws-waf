@@ -138,7 +138,7 @@ resource "aws_wafv2_web_acl" "example" {
 
     visibility_config {
       cloudwatch_metrics_enabled = false
-      metric_name                = "AWSManagedRulesCommonRuleSet"
+      metric_name                = "wharehauora"
       sampled_requests_enabled   = false
     }
   }
@@ -175,6 +175,34 @@ resource "aws_wafv2_web_acl" "example" {
       cloudwatch_metrics_enabled = true
       metric_name                = "SQLInjectionQueryArguments"
       sampled_requests_enabled   = true
+    }
+  }
+
+  rule {
+    name     = "Revil"
+    priority = 3
+
+    statement {
+      regex_match_statement {
+        field_to_match {
+          single_header {
+            name = "_revil"
+          }
+        }
+
+        text_transformation {
+          priority = 1
+          type = "URL_DECODE"
+        }
+
+        regex_string = "blahhh"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = false
+      metric_name                = "Revil"
+      sampled_requests_enabled   = false
     }
   }
 
